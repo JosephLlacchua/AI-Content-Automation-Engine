@@ -288,11 +288,14 @@ def assemble_video(
     idea_id: int,
     orientation: VideoOrientation = Form(VideoOrientation.SHORT),
     bg_volume: float = Form(...),
-    music_path: str = Form(...),
+    music_path: str = Form(""),
 ) -> dict[str, str]:
-    full_music_path = _RESOURCE_BASE / "bg-music" / music_path
-    if not full_music_path.exists():
-        raise HTTPException(404, f"Music file not found: {music_path}")
+    if music_path:
+        full_music_path = _RESOURCE_BASE / "bg-music" / music_path
+        if not full_music_path.exists():
+            raise HTTPException(404, f"Music file not found: {music_path}")
+    else:
+        full_music_path = None
 
     job_id = job_manager.create_job()
     p = _pipeline(orientation)

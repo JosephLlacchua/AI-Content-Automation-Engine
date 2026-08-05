@@ -55,11 +55,12 @@ export default function ProductionStep({ base, level, subsStep, assembleStep, on
       <Left>
         <MusicLibrary selected={selectedPath} onSelect={setSelectedPath} volume={volume / 100} />
 
-        <VolumeRow>
+        <VolumeRow $disabled={!selectedPath}>
           <VolumeLabel>Volumen</VolumeLabel>
           <VolumeSlider
             type="range" min={0} max={100} value={volume}
             onChange={e => setVolume(Number(e.target.value))}
+            disabled={!selectedPath}
           />
           <VolumePct>{volume}%</VolumePct>
         </VolumeRow>
@@ -68,13 +69,10 @@ export default function ProductionStep({ base, level, subsStep, assembleStep, on
           <ActionRow>
             <BtnPrimary
               onClick={() => onSubs({ musicPath: selectedPath, bgVolume: volume / 100 })}
-              disabled={!selectedPath}
             >
-              Poner música y generar subtítulos
+              {selectedPath ? 'Poner música y generar subtítulos' : 'Generar sin música'}
             </BtnPrimary>
-            {!selectedPath && (
-              <MusicHint>Selecciona un archivo de música para continuar.</MusicHint>
-            )}
+            <MusicHint>Puedes seleccionar una pista, o continuar sin música.</MusicHint>
           </ActionRow>
         )}
 
@@ -83,13 +81,10 @@ export default function ProductionStep({ base, level, subsStep, assembleStep, on
           <ActionRow>
             <BtnSecondary
               onClick={() => onSubs({ musicPath: selectedPath, bgVolume: volume / 100 })}
-              disabled={!selectedPath}
             >
-              ↺ Regenerar
+              {selectedPath ? '↺ Regenerar con música' : '↺ Regenerar sin música'}
             </BtnSecondary>
-            {!selectedPath && (
-              <MusicHint>Selecciona un archivo de música para regenerar.</MusicHint>
-            )}
+            <MusicHint>Puedes seleccionar una pista, o regenerar sin música.</MusicHint>
           </ActionRow>
         )}
       </Left>

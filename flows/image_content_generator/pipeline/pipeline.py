@@ -430,7 +430,7 @@ class Pipeline(BaseModelTool):
     def step6_add_background_music(
         self,
         idea_id: int,
-        music_path: Path,
+        music_path: Optional[Path],
         bg_volume: float,
     ):
         """
@@ -450,16 +450,21 @@ class Pipeline(BaseModelTool):
             idea_obj.id, self.EDITIONS_DIR, self.FINAL_VIDEO
         )
 
-        if not music_path.exists():
-            Messenger.error(f"Music file not found: {music_path}")
-            return
+        if not music_path:
+            import shutil
+            shutil.copy2(subtitled_video, final_with_music)
+            Messenger.info("No music provided. Skipped background music.")
+        else:
+            if not music_path.exists():
+                Messenger.error(f"Music file not found: {music_path}")
+                return
 
-        self.ffmpeg.add_background_music(
-            subtitled_video,
-            music_path,
-            final_with_music,
-            bg_volume=bg_volume,
-        )
+            self.ffmpeg.add_background_music(
+                subtitled_video,
+                music_path,
+                final_with_music,
+                bg_volume=bg_volume,
+            )
 
         # 5. Updates state.
         idea_obj.state = State.VIDEO_MUSIC_GENERATED

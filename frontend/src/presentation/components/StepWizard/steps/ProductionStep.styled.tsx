@@ -17,7 +17,7 @@ export const Left = styled.div`
   gap: 10px;
 `
 
-export const VolumeRow = styled.div`
+export const VolumeRow = styled.div<{ $disabled?: boolean }>`
   display: flex;
   align-items: center;
   gap: 10px;
@@ -25,6 +25,8 @@ export const VolumeRow = styled.div`
   background: ${({ theme }) => theme.colors.surface};
   border: 1px solid ${({ theme }) => theme.colors.border};
   border-radius: 8px;
+  opacity: ${({ $disabled }) => ($disabled ? 0.4 : 1)};
+  pointer-events: ${({ $disabled }) => ($disabled ? 'none' : 'auto')};
 `
 
 export const VolumeLabel = styled.span`
