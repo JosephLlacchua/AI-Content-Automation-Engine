@@ -56,7 +56,7 @@ class Pipeline(BaseModelTool):
     RAW_VIDEO: ClassVar[str] = "raw_video.mp4"
     SUBTITLED_VIDEO: ClassVar[str] = "subtitled_video.mp4"
     FINAL_AUDIO: ClassVar[str] = "final_audio.wav"
-    FINAL_SUBS: ClassVar[str] = "final_subs.srt"
+    FINAL_SUBS: ClassVar[str] = "final_subs.ass"
     FINAL_VIDEO: ClassVar[str] = "final_video.mp4"
 
     # Standard Scene Patterns
@@ -414,9 +414,9 @@ class Pipeline(BaseModelTool):
         Messenger.info("Extracting audio for transcription...")
         self.ffmpeg.extract_audio(raw_video, audio_wav)
 
-        # 4. Generate srt
+        # 4. Generate ASS subtitles
         Messenger.info("Transcribing audio via Whisper.cpp...")
-        self.whisper.generate_srt(audio_wav, subs_srt)
+        self.whisper.generate_ass(audio_wav, subs_srt)
 
         # 5. Add Subtitles
         Messenger.info("Adding subtitles to final video...")

@@ -60,6 +60,23 @@ Usa EXACTAMENTE este aspect_ratio en el campo `aspect_ratio` de cada escena:
 - El `image_prompt` debe ilustrar visualmente lo que dice la narración
 - Las imágenes deben mostrar progresión narrativa coherente
 
+### ⚠️ REGLA ANTI-COPYRIGHT PARA image_prompt (CRÍTICA — NO IGNORAR)
+Los generadores de imágenes (como Google Flow / Imagen) bloquean cualquier nombre de personaje protegido por copyright (Marvel, DC, Disney, anime, etc.).
+Por eso, en el campo `description` de cada `subject` dentro de `image_prompt`, NUNCA uses el nombre real del personaje.
+En su lugar, descríbelo **físicamente con características físicas únicas que lo identifiquen visualmente**, tal como haría un director de casting:
+
+**EJEMPLOS OBLIGATORIOS:**
+- ❌ NUNCA: `"Batman"` → ✅ SIEMPRE: `"A tall, broad-shouldered billionaire with a strong square jawline, wearing dark grey and black bat-themed armored suit"`
+- ❌ NUNCA: `"Iron Man"` → ✅ SIEMPRE: `"A middle-aged superhero with a stylish goatee beard and short dark hair, wearing a high-tech red and gold mechanical suit with a glowing chest reactor"`
+- ❌ NUNCA: `"Spiderman"` → ✅ SIEMPRE: `"A nimble teenage hero wearing a red and blue suit with web patterns and large white goggle-like eyes"`
+- ❌ NUNCA: `"Wonder Woman"` → ✅ SIEMPRE: `"A beautiful amazon warrior princess with long dark wavy hair, a golden tiara, red corset armor and blue skirt"`
+- ❌ NUNCA: `"Hulk"` → ✅ SIEMPRE: `"A massive, extremely muscular green giant with messy black hair and torn purple pants"`
+- ❌ NUNCA: `"Goku"` → ✅ SIEMPRE: `"A young athletic warrior with spiky black hair, wearing an orange and blue martial arts gi with a long tail"`
+- ❌ NUNCA: `"Naruto"` → ✅ SIEMPRE: `"A teenage ninja boy with spiky blond hair, wearing an orange and black jumpsuit with a headband protector"`
+
+**REGLA CLAVE:** En el campo `narration` (voz en off) SÍ puedes usar los nombres reales de los personajes porque el audio no tiene filtro de copyright.
+Solo aplica la descripción física en el campo `description` del `image_prompt`.
+
 ### ESTRUCTURA
 - Entre **12 y 16 escenas**
 - Numeración secuencial desde 1
