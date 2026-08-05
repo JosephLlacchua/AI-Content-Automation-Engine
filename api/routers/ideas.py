@@ -56,6 +56,16 @@ def create_idea(
     return idea.model_dump()
 
 
+@router.delete("/{idea_id}")
+def delete_idea(
+    idea_id: int,
+    orientation: VideoOrientation = VideoOrientation.SHORT,
+) -> dict[str, str]:
+    st = _store(orientation)
+    st.delete(idea_id)
+    return {"status": "deleted"}
+
+
 @router.get("/stream/{job_id}")
 async def stream(job_id: str) -> StreamingResponse:
     async def _gen() -> AsyncGenerator[str, None]:

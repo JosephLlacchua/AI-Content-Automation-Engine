@@ -3,7 +3,7 @@ import { Idea } from '../../tools/types'
 import {
   IdeaListRoot, ListHeader, CollapseBtn, IdeaCount, NewBtn,
   IdeaItems, NoIdeas, IdeaItem, IdeaTitle, IdeaMeta, IdeaCategory, StateBadge,
-  CollapsedStrip, CollapsedCount,
+  CollapsedStrip, CollapsedCount, DeleteBtn,
 } from './IdeaList.styled'
 
 const STATE_COLOR: Record<string, string> = {
@@ -24,9 +24,10 @@ interface IdeaListProps {
   onToggle: () => void
   onSelect: (id: number) => void
   onCreated: (idea: Idea) => void
+  onDeleted: (id: number) => void
 }
 
-export default function IdeaList({ ideas, selectedId, isOpen, onToggle, onSelect, onCreated }: IdeaListProps) {
+export default function IdeaList({ ideas, selectedId, isOpen, onToggle, onSelect, onCreated, onDeleted }: IdeaListProps) {
   const [creating, setCreating] = useState(false)
 
   async function handleCreate() {
@@ -35,6 +36,13 @@ export default function IdeaList({ ideas, selectedId, isOpen, onToggle, onSelect
     const idea = (await res.json()) as Idea
     setCreating(false)
     onCreated(idea)
+  }
+
+  async function handleDelete(id: number, e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!confirm('¿Estás seguro de eliminar esta idea y todos sus archivos?')) return
+    await fetch(`/api/ideas/${id}`, { method: 'DELETE' })
+    onDeleted(id)
   }
 
   if (!isOpen) {
@@ -76,7 +84,14 @@ export default function IdeaList({ ideas, selectedId, isOpen, onToggle, onSelect
         )}
         {[...ideas].reverse().map(idea => (
           <IdeaItem key={idea.id} $active={selectedId === idea.id} onClick={() => onSelect(idea.id)}>
-            <IdeaTitle>#{idea.id} — {idea.title || 'Sin título'}</IdeaTitle>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+              <IdeaTitle>#{idea.id} — {idea.title || 'Sin título'}</IdeaTitle>
+              <DeleteBtn onClick={(e) => handleDelete(idea.id, e)} title="Eliminar idea">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6" />
+                </svg>
+              </DeleteBtn>
+            </div>
             <IdeaMeta>
               <IdeaCategory>{idea.category || '—'}</IdeaCategory>
               <StateBadge $color={STATE_COLOR[idea.state] ?? '#64748b'}>{idea.state}</StateBadge>

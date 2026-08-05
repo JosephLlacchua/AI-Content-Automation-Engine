@@ -28,6 +28,11 @@ export default function MainView() {
     setSelectedId(idea.id)
   }, [])
 
+  const handleDeleted = useCallback((id: number) => {
+    setIdeas(prev => prev.filter(i => i.id !== id))
+    setSelectedId(prev => (prev === id ? null : prev))
+  }, [])
+
   const checkKey = useCallback(async () => {
     try {
       const d = await api.geminiKey.check()
@@ -70,6 +75,7 @@ export default function MainView() {
             onToggle={() => setSidebarOpen(o => !o)}
             onSelect={setSelectedId}
             onCreated={handleCreated}
+            onDeleted={handleDeleted}
           />
         </Sidebar>
         <Main>

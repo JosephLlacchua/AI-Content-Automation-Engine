@@ -128,6 +128,30 @@ export const IdeaItem = styled.div<{ $active: boolean }>`
   }
 `
 
+export const DeleteBtn = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: ${({ theme }) => theme.colors.textMuted};
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s;
+
+  &:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+  }
+
+  ${IdeaItem}:hover & {
+    opacity: 1;
+  }
+`
+
+
 export const IdeaTitle = styled.div`
   font-weight: 500;
   font-size: 13px;

@@ -21,6 +21,10 @@ export const api = {
   ideas: {
     list: (): Promise<Idea[]> => fetch(`${BASE}/ideas`).then(r => r.json()),
     generate: (): Promise<Idea> => post(`${BASE}/ideas/generate`),
+    delete: async (id: number): Promise<void> => {
+      const res = await fetch(`${BASE}/ideas/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Delete idea failed')
+    },
   },
 
   script: {

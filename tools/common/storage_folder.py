@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 from typing import Any, Generic, Type, TypeVar
 
@@ -62,3 +63,8 @@ class FolderStore(Generic[T]):
         if not self._meta_path(record.id).exists():
             raise ValueError(f"No record found with ID: {record.id}")
         self._write(record)
+
+    def delete(self, record_id: int) -> None:
+        path = self._meta_path(record_id).parent
+        if path.exists() and path.is_dir():
+            shutil.rmtree(path)

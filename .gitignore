@@ -25,6 +25,14 @@ models
 # future versions
 **/video_content_generator
 
+# Media files
+*.mp3
+*.wav
+*.WAV
+*.mp4
+*.mov
+
+
 # Custom files
 ARCHITECTURE.md
 config.json
