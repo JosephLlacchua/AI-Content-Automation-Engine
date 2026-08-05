@@ -75,13 +75,15 @@ class WhisperTool(BaseModelTool):
 
         return segments
 
-    def generate_srt(
+    def generate_ass(
         self,
         audio_path: Path,
-        output_srt: Path,
+        output_ass: Path,
+        width: int = 1080,
+        height: int = 1920,
     ) -> None:
         """
-        Generates SRT file from audio file.
+        Generates an ASS file from audio file with word-by-word TikTok karaoke style.
         """
         data = self._get_transcription_json(audio_path)
 
@@ -114,14 +116,52 @@ class WhisperTool(BaseModelTool):
         if current:
             blocks.append(current)
 
-        def fmt(ms: int) -> str:
+        def fmt_ass(ms: int) -> str:
+            # ASS format: H:MM:SS.cs
             s, ms = divmod(ms, 1000)
             m, s = divmod(s, 60)
             h, m = divmod(m, 60)
-            return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+            cs = ms // 10
+            return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
-        # 3. Write SRT
-        with open(output_srt, 'w', encoding='utf-8') as f:
-            for i, block in enumerate(blocks):
-                f.write(f"{i+1}\n{fmt(block[0].start)} --> {fmt(block[-1].end)}\n")
-                f.write(" ".join(w.text for w in block) + "\n\n")
+        # Style values
+        font_size = 72
+        margin_v = int(height * 0.15)
+        # ASS Header
+        ass_header = f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: {width}
+PlayResY: {height}
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: TikTok,Arial,{font_size},&HFFFFFF,&H0000FF,&H000000,&H00000000,-1,0,0,0,100,100,0,0,1,5,3,2,10,10,{margin_v},1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+
+        # 3. Write ASS
+        with open(output_ass, 'w', encoding='utf-8') as f:
+            f.write(ass_header)
+            for block in blocks:
+                for i, active_word in enumerate(block):
+                    start_time = fmt_ass(active_word.start)
+                    # For the last word in the block, keep it highlighted until the end of the block's last word
+                    # Actually, the active_word's end time is fine, but to avoid blinking, we can hold it until the next word.
+                    # Or simpler: just use active_word.start to active_word.end for the highlight.
+                    end_time = fmt_ass(active_word.end)
+                    
+                    # If this is the last word in the block, let it stay on screen a bit longer? No, ASS handles exact times.
+                    
+                    line_parts = []
+                    for j, w in enumerate(block):
+                        word_text = w.text.upper()
+                        if j == i:
+                            # Highlighted word: Yellow (&H00FFFF& in ASS BBGGRR)
+                            line_parts.append(f"{{\\c&H00FFFF&}}{word_text}{{\\c}}")
+                        else:
+                            line_parts.append(word_text)
+                    
+                    text_line = " ".join(line_parts)
+                    f.write(f"Dialogue: 0,{start_time},{end_time},TikTok,,0,0,0,,{text_line}\n")

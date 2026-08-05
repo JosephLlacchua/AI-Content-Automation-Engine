@@ -210,32 +210,14 @@ class FFmpegTool(BaseModelTool):
     def add_subtitles_to_video(
         self,
         video_in: Path,
-        srt_path: Path,
+        ass_path: Path,
         video_out: Path,
-        font_size: int = 64
     ) -> None:
         """
-        Adds subtitles to a video.
+        Adds dynamic ASS subtitles to a video.
         """
-        # Get actual dimensions to set coordinate system
-        width = self.get_video_width(video_in)
-        height = self.get_video_height(video_in)
-        margin_v = int(height * 0.15)
-
-        Messenger.info(f"Subtitling: {width}x{height}, MarginV={margin_v}px")
-
-        # Trendy style: Yellow text, black outline, Impact font
-        safe_srt = str(srt_path).replace("\\", "/").replace(":", "\\:")
-
-        # We specify PlayResX/Y so that MarginV and FontSize are in pixels relative
-        # to the video's actual resolution, avoiding the 'middle of the screen' bug.
-        style = (
-            f"PlayResX={width},PlayResY={height},"
-            f"FontName=Impact,FontSize={font_size},PrimaryColour=&H00FFFF,"
-            f"OutlineColour=&H000000,BorderStyle=1,Outline=2,"
-            f"Alignment=2,MarginV={margin_v}"
-        )
-        sub_filter = f"subtitles={safe_srt}:force_style='{style}'"
+        safe_ass = str(ass_path).replace("\\", "/").replace(":", "\\:")
+        sub_filter = f"subtitles={safe_ass}"
 
         cmd = f"""
         ffmpeg -y -i {shlex.quote(str(video_in))} \
