@@ -67,6 +67,8 @@ class Pipeline(BaseModelTool):
 
     # Standard Resource Directories
     BG_MUSIC_DIR: ClassVar[str] = "bg-music"
+    SFX_DIR: ClassVar[str] = "sfx"
+    BUMPERS_DIR: ClassVar[str] = "bumpers"
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
@@ -107,7 +109,8 @@ class Pipeline(BaseModelTool):
     def audio_tool(self) -> AudioTool:
         if self._audio_tool is None:
             bg_music_dir = self.resource_base / self.BG_MUSIC_DIR
-            self._audio_tool = AudioTool(bg_music_dir=bg_music_dir)
+            sfx_dir = self.resource_base / self.SFX_DIR
+            self._audio_tool = AudioTool(bg_music_dir=bg_music_dir, sfx_dir=sfx_dir)
         return self._audio_tool
 
     @property
@@ -328,10 +331,65 @@ class Pipeline(BaseModelTool):
             # 7. Cleanup chunk audio
             chunk_audio_path.unlink(missing_ok=True)
 
+        # Apply SFX automatically
+        self.step3b_apply_sfx(idea_id)
+
         # Final Update
         idea_obj.state = State.AUDIO_GENERATED
         self.store.save(idea_obj)
         Messenger.success(f"Step 3 ready: {State.AUDIO_GENERATED} finalized.\n")
+
+    def step3b_apply_sfx(self, idea_id: int) -> None:
+        """
+        SFX Layer: Reads each scene's sfx_tag from script.json and blends
+        the matching sound effect on top of the scene's narration WAV.
+        Only processes scenes where sfx_tag != 'none'.
+        The narration file is overwritten in-place after mixing.
+        """
+        idea_obj = self.store.get_by_id(idea_id)
+        if not idea_obj:
+            Messenger.error(f"Idea {idea_id} not found.")
+            return
+
+        Messenger.info("\n--- Applying SFX layer to scene audios ---")
+        script_data = self.load_json(idea_obj.id, self.SCRIPT_JSON, VideoScript)
+
+        applied = 0
+        for scene in script_data.scenes:
+            if scene.sfx_tag == "none":
+                continue
+
+            narration_path = self.get_idea_asset_path(
+                idea_obj.id, self.AUDIOS_DIR,
+                self.SCENE_AUDIO_PATTERN.format(scene.scene_number)
+            )
+            if not narration_path.exists():
+                Messenger.warning(
+                    f"  Audio for scene {scene.scene_number} not found, skipping SFX."
+                )
+                continue
+
+            sfx_file = self.audio_tool.get_sfx_by_tag(scene.sfx_tag)
+            if not sfx_file:
+                Messenger.warning(
+                    f"  No SFX file for tag '{scene.sfx_tag}', skipping scene {scene.scene_number}."
+                )
+                continue
+
+            # Mix SFX into a temp file, then atomically replace the original
+            tmp_path = narration_path.with_suffix(".sfx_tmp.wav")
+            self.ffmpeg.mix_sfx_into_audio(
+                narration_wav=narration_path,
+                sfx_mp3=sfx_file,
+                out_wav=tmp_path,
+            )
+            tmp_path.replace(narration_path)
+            Messenger.success(
+                f"  ✓ Scene {scene.scene_number}: [{scene.sfx_tag}] → {sfx_file.name}"
+            )
+            applied += 1
+
+        Messenger.success(f"Step 3b ready: {applied} scenes received SFX layer.\n")
 
     def step4_generate_videos(self, idea_id: int):
         """
@@ -459,7 +517,7 @@ class Pipeline(BaseModelTool):
                 Messenger.error(f"Music file not found: {music_path}")
                 return
 
-            self.ffmpeg.add_background_music(
+            self.ffmpeg.add_background_music_with_ducking(
                 subtitled_video,
                 music_path,
                 final_with_music,
@@ -503,3 +561,50 @@ class Pipeline(BaseModelTool):
         idea_obj.state = State.COMPLETED
         self.store.save(idea_obj)
         Messenger.success(f"Step 7 ready: {State.COMPLETED} finalized.\n")
+
+    def step8_add_bumpers(self, idea_id: int) -> None:
+        """
+        Bumpers: Prepends an intro clip and appends an outro clip to the final video.
+        Both bumpers are optional — if the files don't exist the step is a no-op.
+        Expected file locations:
+          - resource/bumpers/intro.mp4
+          - resource/bumpers/outro.mp4
+        The bumpers must match the resolution and codec of the final video.
+        """
+        idea_obj = self.store.get_by_id(idea_id)
+        if not idea_obj:
+            Messenger.error(f"Idea {idea_id} not found.")
+            return
+
+        Messenger.info("\n--- Adding intro/outro bumpers ---")
+
+        bumpers_dir = self.resource_base / self.BUMPERS_DIR
+        intro = bumpers_dir / "intro.mp4"
+        outro = bumpers_dir / "outro.mp4"
+
+        if not intro.exists() and not outro.exists():
+            Messenger.info("No bumper files found in resource/bumpers/. Skipping.")
+            return
+
+        # Find the named final video (the one renamed in step7)
+        idea_dir = self.get_idea_path(idea_id)
+        mp4_files = [f for f in idea_dir.glob("*.mp4") if "_bumped" not in f.name]
+        if not mp4_files:
+            Messenger.error("Final video not found for bumper step.")
+            return
+
+        final_video = mp4_files[0]
+        bumped_video = final_video.with_name(
+            final_video.stem + "_bumped" + final_video.suffix
+        )
+
+        self.ffmpeg.prepend_and_append_bumpers(
+            main_video=final_video,
+            out_path=bumped_video,
+            intro=intro if intro.exists() else None,
+            outro=outro if outro.exists() else None,
+        )
+
+        # Replace the original with the bumped version
+        bumped_video.replace(final_video)
+        Messenger.success(f"Step 8 ready: bumpers applied to {final_video.name}.\n")

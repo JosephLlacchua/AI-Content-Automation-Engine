@@ -1,4 +1,5 @@
 import json
+from enum import Enum
 from typing import Any, Dict, List, Type
 
 from pydantic import BaseModel, Field
@@ -49,11 +50,47 @@ class VideoPrompt(BaseModel):
     duration_hint: str = Field(description="Duration pacing and rhythm of the scene in ENGLISH (e.g. 'Fast paced', 'Slow and cinematic', '3 seconds')")  # noqa: E501
 
 
+class SFXTag(str, Enum):
+    """Sound effect tag that the AI assigns to each scene."""
+    IMPACT       = "impact"        # Dramatic hit — hook, strong data point, narrative turn
+    WHOOSH       = "whoosh"        # Fast transition between ideas, flashback, time-jump
+    RISER        = "riser"         # Building tension 1-2 scenes before a climax or reveal
+    GASP         = "gasp"          # Surprise, humor, exaggerated reaction, shocking stat
+    POP          = "pop"           # New concept intro, list item, solution appearance on screen
+    FLASH        = "flash"         # Powerful conclusion, call-to-action, memorable close
+    NOTIFICATION = "notification"  # Brilliant idea, insight, "Eureka!" moment
+    TYPING       = "typing"        # Text appearing on screen, CTA message, code, writing
+    GLITCH       = "glitch"        # System failure, something goes wrong, error state
+    MONEY        = "money"         # Money, investment, income, economic transaction
+    SCRATCH      = "scratch"       # Rewind, "wait a moment", quick correction, rollback
+    NONE         = "none"          # No effect — calm development scenes
+
+
+
 class Scene(BaseModel):
     scene_number: int = Field(description="Sequential number of the scene (Integer)")
     image_prompt: ImagePrompt = Field(description="Structured details for image generation")
     video_prompt: VideoPrompt = Field(description="Structured details for video generation")
     narration: str = Field(description="Spoken narration for this scene in SPANISH (LATAM)")
+    sfx_tag: SFXTag = Field(
+        default=SFXTag.NONE,
+        description=(
+            "Sound effect type to play at the START of this scene. "
+            "Choose ONE: "
+            "'impact' (hook/strong data/narrative turn), "
+            "'whoosh' (fast transition/flashback/time-jump), "
+            "'riser' (1-2 scenes BEFORE the climax, builds tension), "
+            "'gasp' (surprise/humor/shocking stat, use max 2x), "
+            "'pop' (new concept appears/list item/solution shown on screen), "
+            "'flash' (conclusion/CTA/memorable close), "
+            "'notification' (brilliant idea/insight/eureka moment), "
+            "'typing' (text on screen/CTA message/code/writing), "
+            "'glitch' (error/failure/something goes wrong), "
+            "'money' (money/investment/income/economic transaction), "
+            "'scratch' (rewind/correction/rollback/wait a moment), "
+            "'none' (calm development, no notable event)."
+        ),
+    )
 
 
 class VideoScript(BaseModel):

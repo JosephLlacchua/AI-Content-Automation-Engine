@@ -2,7 +2,7 @@ import shlex
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from tools.common.base_model import BaseModelTool
 from tools.common.messenger import Messenger
@@ -35,6 +35,36 @@ class FFmpegTool(BaseModelTool):
         )
         self._run(cmd)
 
+    def mix_sfx_into_audio(
+        self,
+        narration_wav: Path,
+        sfx_mp3: Path,
+        out_wav: Path,
+        sfx_volume: float = 0.85,
+        sfx_offset_sec: float = 0.0,
+    ) -> None:
+        """
+        Mixes a sound effect on top of a narration audio file.
+        The SFX is placed at sfx_offset_sec within the narration.
+        Narration always stays at 1.0 volume. The result matches
+        the exact duration of the narration (duration=first).
+        """
+        delay_ms = int(sfx_offset_sec * 1000)
+        filter_complex = (
+            f"[0:a]volume=1.0[narr];"
+            f"[1:a]volume={sfx_volume},adelay={delay_ms}|{delay_ms}[sfx];"
+            "[narr][sfx]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[out]"
+        )
+        cmd = (
+            f"ffmpeg -y "
+            f"-i {shlex.quote(str(narration_wav))} "
+            f"-i {shlex.quote(str(sfx_mp3))} "
+            f'-filter_complex "{filter_complex}" '
+            f'-map "[out]" '
+            f"{shlex.quote(str(out_wav))} -v error"
+        )
+        self._run(cmd)
+
     def make_transition_video(
         self,
         img_a: Path,
@@ -57,6 +87,7 @@ class FFmpegTool(BaseModelTool):
         self,
         video_list: List[Path],
         out_path: Path,
+        reencode: bool = False,
     ) -> None:
         with tempfile.TemporaryDirectory() as td_str:
             td = Path(td_str)
@@ -66,10 +97,17 @@ class FFmpegTool(BaseModelTool):
                     abs_v = v.absolute()
                     f.write(f"file '{abs_v}'\n")
 
-            cmd = f"""
-            ffmpeg -y -f concat -safe 0 -i {shlex.quote(str(list_path))} \
-                -c copy {shlex.quote(str(out_path))}
-            """
+            if reencode:
+                cmd = f"""
+                ffmpeg -y -f concat -safe 0 -i {shlex.quote(str(list_path))} \
+                    -c:v libx264 -c:a aac -pix_fmt yuv420p -movflags +faststart \
+                    {shlex.quote(str(out_path))} -v error
+                """
+            else:
+                cmd = f"""
+                ffmpeg -y -f concat -safe 0 -i {shlex.quote(str(list_path))} \
+                    -c copy -movflags +faststart {shlex.quote(str(out_path))} -v error
+                """
             self._run(cmd)
 
     def get_audio_duration(self, audio_path: Path) -> float:
@@ -120,9 +158,9 @@ class FFmpegTool(BaseModelTool):
         cmd = (
             f"ffmpeg -y -i {shlex.quote(str(video_in))} "
             f"-i {shlex.quote(str(audio_in))} "
-            f'-filter_complex "[0:v]setpts={scale:.6f}*PTS[v]" '
+            f'-filter_complex "[0:v]setpts={scale:.6f}*PTS,fps=25[v]" '
             f'-map "[v]" -map 1:a '
-            f"-c:v libx264 -c:a aac -pix_fmt yuv420p "
+            f"-c:v libx264 -c:a aac -ar 44100 -ac 2 -pix_fmt yuv420p -r 25 "
             f"{shlex.quote(str(video_out))} -v error"
         )
         self._run(cmd)
@@ -189,9 +227,9 @@ class FFmpegTool(BaseModelTool):
         cmd = f"""
         ffmpeg -y -loop 1 -i {shlex.quote(str(img_path))} \
           -i {shlex.quote(str(audio_path))} \
-          -vf "{zoom_filter},{rotate_filter}" \
+          -vf "{zoom_filter},{rotate_filter},fps=25" \
           -shortest \
-          -c:v libx264 -c:a aac -pix_fmt yuv420p {shlex.quote(str(out_path))}
+          -c:v libx264 -c:a aac -ar 44100 -ac 2 -pix_fmt yuv420p -r 25 {shlex.quote(str(out_path))}
         """
         self._run(cmd)
 
@@ -242,7 +280,7 @@ class FFmpegTool(BaseModelTool):
         filter_complex = (
             f"[0:a]volume=1.0[v_a]; "
             f"[1:a]volume={bg_volume}[bg_a]; "
-            "[v_a][bg_a]amix=inputs=2:duration=first[fixed_a]"
+            "[v_a][bg_a]amix=inputs=2:duration=first:normalize=0[fixed_a]"
         )
 
         # -stream_loop -1 loops the background audio indefinitely
@@ -251,6 +289,77 @@ class FFmpegTool(BaseModelTool):
           -stream_loop -1 -i {shlex.quote(str(audio_bg))} \
           -filter_complex "{filter_complex}" \
           -map 0:v -map "[fixed_a]" \
-          -c:v copy -c:a aac {shlex.quote(str(video_out))}
+          -c:v copy -c:a aac -movflags +faststart {shlex.quote(str(video_out))}
         """
         self._run(cmd)
+
+    def add_background_music_with_ducking(
+        self,
+        video_in: Path,
+        audio_bg: Path,
+        video_out: Path,
+        bg_volume: float = 0.30,
+    ) -> None:
+        """
+        Mixes background music into a video using sidechain ducking.
+        The music automatically lowers when narration is active and rises
+        back during silences — exactly like a professional audio mix.
+
+        Parameters
+        ----------
+        bg_volume : float
+            Base volume of the music track (before ducking). Higher than the
+            flat mixer because ducking will reduce it during speech anyway.
+        """
+        # Sidechain ducking explanation:
+        #   - threshold: voice amplitude level that triggers ducking (0.02 = very sensitive)
+        #   - ratio: how aggressively to compress (6:1 = significant duck)
+        #   - attack: how fast the duck kicks in when voice appears (ms)
+        #   - release: how slowly music comes back after voice stops (ms) — long for smoothness
+        #   - level_sc: sidechain input gain (amplifies the voice signal used to trigger)
+        filter_complex = (
+            f"[0:a]volume=1.0[narr];"
+            f"[1:a]volume={bg_volume}[bg_raw];"
+            "[bg_raw][narr]sidechaincompress="
+            "threshold=0.02:ratio=6:attack=20:release=800:"
+            "level_sc=0.9[bg_ducked];"
+            "[narr][bg_ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[out]"
+        )
+
+        # -stream_loop -1 loops background audio indefinitely
+        cmd = (
+            f"ffmpeg -y "
+            f"-i {shlex.quote(str(video_in))} "
+            f"-stream_loop -1 -i {shlex.quote(str(audio_bg))} "
+            f'-filter_complex "{filter_complex}" '
+            f"-map 0:v -map \"[out]\" "
+            f"-c:v copy -c:a aac -movflags +faststart {shlex.quote(str(video_out))}"
+        )
+        self._run(cmd)
+
+    def prepend_and_append_bumpers(
+        self,
+        main_video: Path,
+        out_path: Path,
+        intro: Optional[Path] = None,
+        outro: Optional[Path] = None,
+    ) -> None:
+        """
+        Concatenates an optional intro clip, the main video, and an optional
+        outro clip into a single output file. Clips must share the same
+        codec, resolution, and framerate as the main video for a lossless concat.
+        If neither intro nor outro are provided, the main video is copied as-is.
+        """
+        import shutil
+        clips: List[Path] = []
+        if intro and intro.exists():
+            clips.append(intro)
+        clips.append(main_video)
+        if outro and outro.exists():
+            clips.append(outro)
+
+        if len(clips) == 1:
+            shutil.copy2(main_video, out_path)
+            return
+
+        self.concat_videos(clips, out_path, reencode=True)

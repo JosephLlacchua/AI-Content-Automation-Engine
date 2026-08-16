@@ -124,8 +124,10 @@ class WhisperTool(BaseModelTool):
             cs = ms // 10
             return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
-        # Style values
-        font_size = 72
+        # Style values — Arial 75px, bold, 5px black outline, 3px shadow
+        # MarginV at 15% from bottom keeps subtitles in the lower-center safe zone.
+        font_name = "Arial"
+        font_size = 75
         margin_v = int(height * 0.15)
         # ASS Header
         ass_header = f"""[Script Info]
@@ -135,7 +137,7 @@ PlayResY: {height}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: TikTok,Arial,{font_size},&HFFFFFF,&H0000FF,&H000000,&H00000000,-1,0,0,0,100,100,0,0,1,5,3,2,10,10,{margin_v},1
+Style: TikTok,{font_name},{font_size},&HFFFFFF,&H0000FF,&H000000,&H00000000,-1,0,0,0,100,100,0,0,1,5,3,2,10,10,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

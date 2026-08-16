@@ -253,6 +253,22 @@ def generate_audio(
     return {"job_id": job_id}
 
 
+@router.post("/{idea_id}/sfx")
+def apply_sfx(
+    idea_id: int,
+    orientation: VideoOrientation = VideoOrientation.SHORT,
+) -> dict[str, str]:
+    """Mixes SFX tags defined in the script onto the narration audio files."""
+    job_id = job_manager.create_job()
+    p = _pipeline(orientation)
+    _executor.submit(
+        job_manager.run_in_job,
+        job_id,
+        lambda: p.step3b_apply_sfx(idea_id=idea_id),
+    )
+    return {"job_id": job_id}
+
+
 @router.post("/{idea_id}/sync")
 def generate_sync(
     idea_id: int,
@@ -307,6 +323,7 @@ def assemble_video(
             bg_volume=bg_volume,
         )
         p.step7_rename_final_video(idea_id=idea_id)
+        p.step8_add_bumpers(idea_id=idea_id)
 
     _executor.submit(job_manager.run_in_job, job_id, _run)
     return {"job_id": job_id}
