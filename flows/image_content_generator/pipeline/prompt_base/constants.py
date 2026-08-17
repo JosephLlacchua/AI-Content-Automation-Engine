@@ -18,6 +18,11 @@ TONE_DESCRIPTIONS: dict[str, str] = {
     "dramatico": "dramático y tenso, con narrativa de suspenso, giros inesperados e impacto emocional fuerte",
     "entretenimiento": "entretenido y dinámico, con ritmo ágil, momentos de sorpresa y enganche constante",
     "inspiracional": "inspiracional y emotivo, con historias de superación, valores universales y mensaje poderoso",
+    "controversial": "polémico y directo, desafiando verdades aceptadas por la sociedad, generando debate inmediato y rompiendo mitos",
+    "misterio": "intrigante y conspirativo, revelando un secreto paso a paso, manteniendo el misterio absoluto hasta la última frase",
+    "alerta": "urgente y de advertencia, alertando sobre un error gravísimo que todos cometen, generando miedo a perder dinero o tiempo (FOMO)",
+    "storytelling": "narrativo y muy íntimo, como una confesión personal, contando un fracaso o anécdota real con mucha vulnerabilidad",
+    "sarcastico": "sarcástico y mordaz, usando ironía para burlarse de situaciones cotidianas, explicando realidades incómodas con humor seco",
 }
 
 CATEGORY_DESCRIPTIONS: dict[str, str] = {
@@ -36,11 +41,15 @@ FORM_SCRIPT_PROMPT: str = """# 🎬 GENERADOR DE SCRIPT — VIDEO SHORT
 **Tono narrativo:** {tone_desc}
 **Formato de video:** {aspect_ratio}
 
-## ESTILO VISUAL (OBLIGATORIO PARA TODOS LOS image_prompt)
+## ESTILO VISUAL Y COMPOSICIÓN (OBLIGATORIO PARA TODOS LOS image_prompt)
 Usa EXACTAMENTE este estilo en el campo `style` de cada escena:
 `{style_desc}`
 Usa EXACTAMENTE este aspect_ratio en el campo `aspect_ratio` de cada escena:
 `{aspect_ratio}`
+
+⚠️ REGLA CRÍTICA DE COMPOSICIÓN: Si el aspect_ratio es "9:16", el campo `composition` DEBE forzar encuadres verticales e incluir instrucciones explícitas para evitar rotaciones.
+Ejemplo de `composition` correcto para 9:16: "Vertical frame, portrait framing, upright orientation, DO NOT ROTATE, tall composition".
+NUNCA uses términos como "Wide shot", "Panorama", o "Landscape", ya que causan que la IA rote la imagen 90 grados y los personajes salgan acostados o de lado.
 
 ## ESTRUCTURA DEL GUION (MANDATORIA)
 1. **Acto 1 — Hook [Escenas 1-4]:** Gancho que detenga el scroll en los primeros 3 segundos. Arranca con la idea central de forma impactante.
