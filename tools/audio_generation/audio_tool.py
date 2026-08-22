@@ -68,3 +68,33 @@ class AudioTool(BaseModelTool):
         Messenger.info(f"SFX selected: [{tag}] → {selected.name}")
         return selected
 
+    def get_sfx_by_file(self, tag: str, filename: str) -> Optional[Path]:
+        """
+        Returns the exact SFX file path given a tag and a filename.
+        Returns None if the file doesn't exist.
+        """
+        if not self.sfx_dir:
+            return None
+        target = self.sfx_dir / tag / filename
+        return target if target.exists() else None
+
+    def list_sfx_catalog(self) -> dict[str, list[str]]:
+        """
+        Scans sfx_dir and returns a mapping of tag -> sorted list of filenames.
+        Example: {"impact": ["impact_boom.mp3"], "glitch": ["glitch_digital.mp3"]}
+        """
+        if not self.sfx_dir or not self.sfx_dir.exists():
+            return {}
+
+        extensions = {".wav", ".mp3", ".aac", ".m4a"}
+        catalog: dict[str, list[str]] = {}
+        for tag_folder in sorted(self.sfx_dir.iterdir()):
+            if not tag_folder.is_dir():
+                continue
+            files = sorted(
+                f.name for f in tag_folder.iterdir()
+                if f.is_file() and f.suffix.lower() in extensions
+            )
+            if files:
+                catalog[tag_folder.name] = files
+        return catalog

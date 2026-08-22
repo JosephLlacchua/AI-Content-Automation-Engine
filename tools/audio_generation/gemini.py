@@ -24,7 +24,8 @@ class GeminiAudioGenerator(GeminiBase):
 
         audio_path.parent.mkdir(parents=True, exist_ok=True)
 
-        response = self.client.models.generate_content(
+        response = self._execute_with_retry(
+            self.client.models.generate_content,
             model=self.tts_model,
             contents=text,
             config=types.GenerateContentConfig(

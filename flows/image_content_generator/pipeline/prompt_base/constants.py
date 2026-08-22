@@ -174,41 +174,61 @@ AUDIO_PROMPT: str = """Narra el siguiente guion con voz clara, expresiva y envol
 
 {audio_text}"""
 
-ALIGNMENT_PROMPT: str = """# 🧠 PROMPT MAESTRO — ALINEAMIENTO DE AUDIO Y TEXTO
+ALIGNMENT_PROMPT: str = """# \ud83e\udde0 ALINEADOR DE AUDIO \u2014 MAESTRO DE PRECISI\u00d3N FON\u00c9TICA
 
-Eres un experto en el alineamiento de audio y texto. Tu tarea es identificar los tiempos exactos de inicio y fin para cada escena del guion basándote en los datos de Whisper.
+Eres un experto en post-producci\u00f3n de audio para video. Tu \u00fanica tarea es determinar los timestamps exactos de inicio y fin de cada escena del gui\u00f3n dentro de un audio transcrito por Whisper.
 
 ---
 
-## 🔹 DATOS DE WHISPER (Con timestamps)
+## \ud83d\udd39 TRANSCRIPCI\u00d3N WHISPER (timestamps por segmento)
 {whisper_data}
 
 ---
 
-## 📝 GUION ORIGINAL (Escenas)
+## \ud83d\udcdd GUI\u00d3N (cada l\u00ednea es UNA escena completa e indivisible)
 {scenes_data}
 
 ---
 
-## 📋 INSTRUCCIONES (CRÍTICAS)
-1. Debes devolver exactamente {expected_count} escenas en el JSON.
-2. Para cada escena, identifica el tiempo de inicio (`start_time`) y fin (`end_time`) en el audio.
-3. El inicio de la escena 1 suele ser 0.000s.
-4. El fin de una escena debe coincidir con el inicio de la siguiente.
-4. Sé preciso. Ignora pequeñas diferencias de palabras entre el guion y el audio.
-5. Responde exclusivamente en formato JSON.
+## \u26a0\ufe0f REGLAS CR\u00cdTICAS \u2014 LEE CADA UNA:
 
-## 📦 FORMATO DE SALIDA (JSON)
-Responde exclusivamente con el siguiente esquema JSON:
+**REGLA #1 \u2014 INTEGRIDAD DE FRASE (LA M\u00c1S IMPORTANTE):**
+Cada narration del gui\u00f3n es una unidad indivisible. El end_time de una escena DEBE coincidir EXACTAMENTE con el final de la ULTIMA PALABRA de esa narraci\u00f3n.
+PROHIBIDO: cortar una escena antes de que termine su \u00faltima palabra.
+PROHIBIDO: que las palabras de una escena aparezcan en el audio de otra escena.
+
+**REGLA #2 \u2014 SIN SOLAPAMIENTOS:**
+El end_time de la escena N DEBE ser id\u00e9ntico al start_time de la escena N+1.
+No puede haber huecos ni solapamientos entre escenas.
+
+**REGLA #3 \u2014 BUSCA LA \u00daLTIMA PALABRA:**
+Para encontrar el end_time de una escena, localiza en los segmentos de Whisper la ULTIMA PALABRA de esa narraci\u00f3n y usa el timestamp de FIN de esa palabra. No uses el inicio de la siguiente escena como referencia para cortar la anterior.
+
+**REGLA #4 \u2014 PRIMERA ESCENA:**
+start_time de la escena 1 = 0.000 siempre.
+
+**REGLA #5 \u2014 CUENTA EXACTA:**
+Debes devolver exactamente {expected_count} objetos en el array "alignments".
+
+**REGLA #6 \u2014 SOLO JSON:**
+Responde exclusivamente con el JSON. Ning\u00fan texto extra antes o despu\u00e9s.
+
+---
+
+## \ud83d\udce6 FORMATO DE SALIDA
 ```json
 {{
   "alignments": [
     {{
       "scene_number": 1,
       "start_time": 0.000,
-      "end_time": 5.452
+      "end_time": 4.850
     }},
-    ...
+    {{
+      "scene_number": 2,
+      "start_time": 4.850,
+      "end_time": 9.200
+    }}
   ]
 }}
 ```

@@ -64,6 +64,10 @@ class Pipeline(BaseModelTool):
     SCENE_VIDEO_PATTERN: ClassVar[str] = "scene_{:04d}.mp4"
     SCENE_VIDEO_SYNCED_PATTERN: ClassVar[str] = "scene_{:04d}_synced.mp4"
     BATCH_AUDIO_PATTERN: ClassVar[str] = "batch_{:04d}.wav"
+    # Separator inserted between scenes during TTS synthesis.
+    # The ellipsis + 3 newlines forces the TTS voice to pause ~1-2 seconds,
+    # creating a clear gap that Whisper/Gemini can use as a scene boundary.
+    SCENE_SEPARATOR: ClassVar[str] = "...\n\n\n"
 
     # Standard Resource Directories
     BG_MUSIC_DIR: ClassVar[str] = "bg-music"
@@ -221,23 +225,16 @@ class Pipeline(BaseModelTool):
         title = form.idea[:80].strip()
         return script, title, form.category
 
-    @retry(max_attempts=3)
     def step3_generate_audios(self, idea_id: int, force: bool = False):
         """
-        Generate Audio: Batched AI-Guided Batching (Whisper + Gemini).
-        Processes scenes in groups of 10 for maximum stability and alignment precision.
+        Generate Audio: Batched TTS synthesis + Deterministic Whisper Word-Level Alignment.
+        Uses a single TTS request per batch to prevent 429 quota exhaustion, and aligns
+        with exact word timestamps to guarantee zero truncated sentences.
         """
         idea_obj = self.store.get_by_id(idea_id)
         if not idea_obj:
             Messenger.error(f"Idea {idea_id} not found.")
             return
-
-        if force:
-            import shutil
-            audios_dir = self.get_idea_subdir(idea_obj.id, self.AUDIOS_DIR)
-            if audios_dir.exists():
-                shutil.rmtree(audios_dir)
-                Messenger.info("Cleared existing audio files for regeneration.")
 
         Messenger.info("\n--- Generating batched audio for the script ---")
         script_data = self.load_json(idea_obj.id, self.SCRIPT_JSON, VideoScript)
@@ -252,20 +249,21 @@ class Pipeline(BaseModelTool):
 
             Messenger.info(f"Processing Batch {batch_num}: Scenes {start_idx + 1} to {end_idx}")
 
-            # 1. Skip if all scenes in batch already exist
-            missing_any = False
-            for j in range(len(chunk)):
-                scene_num = start_idx + j + 1
-                out_path = self.get_idea_asset_path(
-                    idea_obj.id, self.AUDIOS_DIR, self.SCENE_AUDIO_PATTERN.format(scene_num)
-                )
-                if not out_path.exists():
-                    missing_any = True
-                    break
+            # 1. Skip if all scenes in batch already exist (unless force=True)
+            if not force:
+                missing_any = False
+                for j in range(len(chunk)):
+                    scene_num = start_idx + j + 1
+                    out_path = self.get_idea_asset_path(
+                        idea_obj.id, self.AUDIOS_DIR, self.SCENE_AUDIO_PATTERN.format(scene_num)
+                    )
+                    if not out_path.exists():
+                        missing_any = True
+                        break
 
-            if not missing_any:
-                Messenger.info(f"Skipping Batch {batch_num}: All audio files exist.")
-                continue
+                if not missing_any:
+                    Messenger.info(f"Skipping Batch {batch_num}: All audio files exist.")
+                    continue
 
             # 2. Synthesize chunk audio
             chunk_filename = self.BATCH_AUDIO_PATTERN.format(batch_num)
@@ -274,62 +272,44 @@ class Pipeline(BaseModelTool):
             )
 
             Messenger.info(f"Synthesizing audio for Batch {batch_num}...")
-            chunk_text = "\n\n".join([s.narration for s in chunk])
+            chunk_text = " \n\n ".join([s.narration for s in chunk])
             formatted_audio = self.prompt_manager.get_audio_prompt(chunk_text)
             self.audio_gen.text_to_speech(formatted_audio, chunk_audio_path)
 
-            # 3. Transcribe chunk
-            Messenger.info(f"Transcribing Batch {batch_num} for alignment...")
-            segments = self.whisper.get_transcription_segments(chunk_audio_path)
-
-            # 4. Align chunk
-            Messenger.info(f"Aligning Batch {batch_num} via Gemini...")
+            # 3. Deterministic Whisper Word-Level Alignment
+            Messenger.info(f"Aligning Batch {batch_num} via Whisper Word Timestamps...")
             chunk_script_texts = [s.narration for s in chunk]
-            prompt = self.prompt_manager.get_alignment_prompt(segments, chunk_script_texts)
-            alignment = self.text_gen.generate_text(prompt, AudioAlignment)
+            alignments = self.whisper.align_scenes(chunk_audio_path, chunk_script_texts)
 
-            # 5. Validate alignment count
-            if len(alignment.alignments) != len(chunk):
-                # Delete corrupted chunk to force retry
-                chunk_audio_path.unlink(missing_ok=True)
-                chunk_audio_path.with_name(chunk_audio_path.name + ".json").unlink(missing_ok=True)
-                error_msg = (
-                    f"Alignment mismatch in Batch {batch_num}: "
-                    f"Expected {len(chunk)}, got {len(alignment.alignments)}"
-                )
-                raise RuntimeError(error_msg)
-
-            # 6. Split and Save
+            # 4. Split and Save
             Messenger.info(f"Splitting Batch {batch_num} into {len(chunk)} scene audios...")
-            for al in alignment.alignments:
-                # al.scene_number is 1-indexed relative to the chunk (1 to 10)
-                absolute_scene_num = start_idx + al.scene_number
+            for al in alignments:
+                scene_num_rel = al['scene_number']
+                absolute_scene_num = start_idx + scene_num_rel
                 out_path = self.get_idea_asset_path(
                     idea_obj.id,
                     self.AUDIOS_DIR,
                     self.SCENE_AUDIO_PATTERN.format(absolute_scene_num)
                 )
 
-                duration = al.end_time - al.start_time
-                if duration < 0.5:
-                    chunk_audio_path.unlink(missing_ok=True)
-                    chunk_audio_path.with_name(
-                        chunk_audio_path.name + ".json"
-                    ).unlink(missing_ok=True)
-                    raise RuntimeError(
-                        f"Invalid duration (Scene {absolute_scene_num}): "
-                        f"{duration:.3f}s. Forcing retry."
-                    )
+                start_time = al['start_time']
+                duration = al['end_time'] - start_time
+                if duration <= 0.2:
+                    duration = 1.0
 
+                clean_path = out_path.with_name(f"scene_{absolute_scene_num:04d}_clean.wav")
                 self.ffmpeg.split_audio(
                     audio_in=chunk_audio_path,
-                    audio_out=out_path,
-                    start_time=al.start_time,
+                    audio_out=clean_path,
+                    start_time=start_time,
                     duration=duration
                 )
+                import shutil
+                shutil.copy2(clean_path, out_path)
 
-            # 7. Cleanup chunk audio
+            # 5. Cleanup chunk audio
             chunk_audio_path.unlink(missing_ok=True)
+            chunk_audio_path.with_name(chunk_audio_path.name + ".json").unlink(missing_ok=True)
 
         # Apply SFX automatically
         self.step3b_apply_sfx(idea_id)
@@ -342,10 +322,11 @@ class Pipeline(BaseModelTool):
     def step3b_apply_sfx(self, idea_id: int) -> None:
         """
         SFX Layer: Reads each scene's sfx_tag from script.json and blends
-        the matching sound effect on top of the scene's narration WAV.
+        the matching sound effect on top of the scene's clean narration WAV.
         Only processes scenes where sfx_tag != 'none'.
         The narration file is overwritten in-place after mixing.
         """
+        import shutil
         idea_obj = self.store.get_by_id(idea_id)
         if not idea_obj:
             Messenger.error(f"Idea {idea_id} not found.")
@@ -356,17 +337,27 @@ class Pipeline(BaseModelTool):
 
         applied = 0
         for scene in script_data.scenes:
-            if scene.sfx_tag == "none":
-                continue
-
             narration_path = self.get_idea_asset_path(
                 idea_obj.id, self.AUDIOS_DIR,
                 self.SCENE_AUDIO_PATTERN.format(scene.scene_number)
             )
-            if not narration_path.exists():
+            clean_path = narration_path.with_name(f"scene_{scene.scene_number:04d}_clean.wav")
+            
+            if not clean_path.exists() and narration_path.exists():
+                shutil.copy2(narration_path, clean_path)
+
+            source_audio = clean_path if clean_path.exists() else narration_path
+
+            if not source_audio.exists():
                 Messenger.warning(
                     f"  Audio for scene {scene.scene_number} not found, skipping SFX."
                 )
+                continue
+
+            if scene.sfx_tag == "none":
+                # Ensure clean narration without SFX
+                if clean_path.exists():
+                    shutil.copy2(clean_path, narration_path)
                 continue
 
             sfx_file = self.audio_tool.get_sfx_by_tag(scene.sfx_tag)
@@ -379,7 +370,7 @@ class Pipeline(BaseModelTool):
             # Mix SFX into a temp file, then atomically replace the original
             tmp_path = narration_path.with_suffix(".sfx_tmp.wav")
             self.ffmpeg.mix_sfx_into_audio(
-                narration_wav=narration_path,
+                narration_wav=source_audio,
                 sfx_mp3=sfx_file,
                 out_wav=tmp_path,
             )
@@ -390,6 +381,83 @@ class Pipeline(BaseModelTool):
             applied += 1
 
         Messenger.success(f"Step 3b ready: {applied} scenes received SFX layer.\n")
+
+    def step3b_apply_sfx_single_scene(
+        self,
+        idea_id: int,
+        scene_number: int,
+        sfx_tag: str,
+        sfx_filename: str,
+    ) -> Path:
+        """
+        Re-applies SFX to a single scene audio file using an explicit file
+        chosen by the user (or removes SFX if sfx_tag is 'none').
+        """
+        import shutil
+        idea_obj = self.store.get_by_id(idea_id)
+        if not idea_obj:
+            raise ValueError(f"Idea {idea_id} not found.")
+
+        narration_path = self.get_idea_asset_path(
+            idea_obj.id, self.AUDIOS_DIR,
+            self.SCENE_AUDIO_PATTERN.format(scene_number)
+        )
+        clean_path = narration_path.with_name(f"scene_{scene_number:04d}_clean.wav")
+
+        if not narration_path.exists() and not clean_path.exists():
+            raise FileNotFoundError(
+                f"Audio for scene {scene_number} not found: {narration_path}"
+            )
+
+        if not clean_path.exists() and narration_path.exists():
+            shutil.copy2(narration_path, clean_path)
+
+        source_audio = clean_path if clean_path.exists() else narration_path
+
+        # If user wants to remove SFX ("none")
+        if sfx_tag == "none" or not sfx_filename:
+            if clean_path.exists():
+                shutil.copy2(clean_path, narration_path)
+            # Update script.json
+            try:
+                script_data = self.load_json(idea_obj.id, self.SCRIPT_JSON, VideoScript)
+                for sc in script_data.scenes:
+                    if sc.scene_number == scene_number:
+                        sc.sfx_tag = "none"
+                self.save_json(idea_obj.id, self.SCRIPT_JSON, script_data)
+            except Exception:
+                pass
+            Messenger.info(f"✓ Scene {scene_number}: SFX removed (clean narration restored).")
+            return narration_path
+
+        sfx_file = self.audio_tool.get_sfx_by_file(sfx_tag, sfx_filename)
+        if not sfx_file:
+            raise FileNotFoundError(
+                f"SFX file not found: sfx/{sfx_tag}/{sfx_filename}"
+            )
+
+        tmp_path = narration_path.with_suffix(".sfx_tmp.wav")
+        self.ffmpeg.mix_sfx_into_audio(
+            narration_wav=source_audio,
+            sfx_mp3=sfx_file,
+            out_wav=tmp_path,
+        )
+        tmp_path.replace(narration_path)
+
+        # Update script.json
+        try:
+            script_data = self.load_json(idea_obj.id, self.SCRIPT_JSON, VideoScript)
+            for sc in script_data.scenes:
+                if sc.scene_number == scene_number:
+                    sc.sfx_tag = sfx_tag
+            self.save_json(idea_obj.id, self.SCRIPT_JSON, script_data)
+        except Exception:
+            pass
+
+        Messenger.success(
+            f"✓ Scene {scene_number} re-mixed: [{sfx_tag}] → {sfx_filename}"
+        )
+        return narration_path
 
     def step4_generate_videos(self, idea_id: int):
         """

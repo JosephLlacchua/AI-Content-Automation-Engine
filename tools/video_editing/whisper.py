@@ -75,19 +75,11 @@ class WhisperTool(BaseModelTool):
 
         return segments
 
-    def generate_ass(
-        self,
-        audio_path: Path,
-        output_ass: Path,
-        width: int = 1080,
-        height: int = 1920,
-    ) -> None:
+    def get_words(self, audio_path: Path) -> List[WhisperWord]:
         """
-        Generates an ASS file from audio file with word-by-word TikTok karaoke style.
+        Extracts and merges whisper tokens into a list of words with millisecond timestamps.
         """
         data = self._get_transcription_json(audio_path)
-
-        # 1. Extract and merge tokens into words
         tokens = [
             t
             for s in data.transcription
@@ -103,6 +95,106 @@ class WhisperTool(BaseModelTool):
             else:
                 words[-1].text += text
                 words[-1].end = t_to
+        return words
+
+    def align_scenes(
+        self,
+        audio_path: Path,
+        scene_texts: List[str]
+    ) -> List[dict]:
+        """
+        Deterministically aligns scene texts to exact whisper word boundary timestamps.
+        Cuts tightly from the first spoken word to the last spoken word of each scene,
+        eliminating awkward leading silence (so SFX hits on cue) and preventing trailing word bleed.
+        """
+        import re
+        words = self.get_words(audio_path)
+        alignments: List[dict] = []
+        current_word_idx = 0
+        total_words = len(words)
+
+        def norm(t: str) -> str:
+            return re.sub(r'[^\w]', '', t.lower())
+
+        for scene_idx, scene_text in enumerate(scene_texts, start=1):
+            scene_words = [norm(w) for w in scene_text.split() if norm(w)]
+            if not scene_words:
+                continue
+
+            first_scene_word = scene_words[0]
+            last_scene_word = scene_words[-1]
+
+            # 1. Locate first spoken word of this scene
+            found_first_idx = None
+            for idx in range(current_word_idx, min(total_words, current_word_idx + 15)):
+                if norm(words[idx].text) == first_scene_word:
+                    found_first_idx = idx
+                    break
+            if found_first_idx is None:
+                found_first_idx = current_word_idx
+
+            # 2. Locate last spoken word of this scene
+            found_last_idx = None
+            search_start = found_first_idx + max(0, len(scene_words) - 5)
+            search_end = min(total_words, found_first_idx + len(scene_words) + 15)
+
+            for idx in range(search_start, search_end):
+                if norm(words[idx].text) == last_scene_word:
+                    found_last_idx = idx
+                    break
+
+            if found_last_idx is None:
+                for idx in range(found_first_idx, min(total_words, found_first_idx + len(scene_words) + 30)):
+                    if norm(words[idx].text) == last_scene_word:
+                        found_last_idx = idx
+                        break
+
+            if found_last_idx is None:
+                found_last_idx = min(total_words - 1, found_first_idx + len(scene_words) - 1)
+
+            # Start time: just 0.06s before the first spoken word
+            if scene_idx == 1:
+                start_s = 0.0
+            else:
+                start_s = max(0.0, (words[found_first_idx].start / 1000.0) - 0.06)
+
+            # End time: 0.06s after the last spoken word
+            if scene_idx == len(scene_texts) and words:
+                end_s = words[-1].end / 1000.0
+            else:
+                end_s = (words[found_last_idx].end / 1000.0) + 0.06
+
+            captured_words = " ".join([w.text for w in words[found_first_idx:found_last_idx+1]])
+            print(f"🎬 [Whisper Cut] Escena {scene_idx} ({round(start_s, 2)}s - {round(end_s, 2)}s): {captured_words}")
+
+            alignments.append({
+                'scene_number': scene_idx,
+                'start_time': round(start_s, 3),
+                'end_time': round(end_s, 3)
+            })
+
+            current_word_idx = found_last_idx + 1
+
+        # Prevent boundary overlap between consecutive scenes
+        for i in range(len(alignments) - 1):
+            if alignments[i]['end_time'] > alignments[i+1]['start_time']:
+                mid = round((alignments[i]['end_time'] + alignments[i+1]['start_time']) / 2.0, 3)
+                alignments[i]['end_time'] = mid
+                alignments[i+1]['start_time'] = mid
+
+        return alignments
+
+    def generate_ass(
+        self,
+        audio_path: Path,
+        output_ass: Path,
+        width: int = 1080,
+        height: int = 1920,
+    ) -> None:
+        """
+        Generates an ASS file from audio file with word-by-word TikTok karaoke style.
+        """
+        words = self.get_words(audio_path)
 
         # 2. Group words into blocks (max 3 words or pause > 0.4s)
         blocks: List[List[WhisperWord]] = []

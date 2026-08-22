@@ -4,6 +4,7 @@ from typing import Any, AsyncGenerator, List
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import BaseModel
 
 from api import job_manager
 from flows.image_content_generator.pipeline.pipeline import Pipeline
@@ -142,7 +143,11 @@ def list_audios(
     audios_dir = _out(orientation) / "ideas" / f"idea_{idea_id:06d}" / "audios"
     if not audios_dir.exists():
         return []
-    return sorted(f.name for f in audios_dir.glob("scene_*.wav"))
+    import re
+    return sorted(
+        f.name for f in audios_dir.iterdir()
+        if f.is_file() and re.match(r"^scene_\d{4}\.wav$", f.name)
+    )
 
 
 @router.get("/{idea_id}/audios/{filename}")
@@ -268,6 +273,32 @@ def apply_sfx(
     )
     return {"job_id": job_id}
 
+
+class SfxSceneRequest(BaseModel):
+    scene_number: int
+    sfx_tag: str
+    sfx_file: str
+
+
+@router.post("/{idea_id}/sfx/scene")
+def apply_sfx_scene(
+    idea_id: int,
+    body: SfxSceneRequest,
+    orientation: VideoOrientation = VideoOrientation.SHORT,
+) -> dict[str, str]:
+    """Re-mixes SFX for a single scene using an explicit file chosen by the user."""
+    p = _pipeline(orientation)
+    try:
+        p.step3b_apply_sfx_single_scene(
+            idea_id=idea_id,
+            scene_number=body.scene_number,
+            sfx_tag=body.sfx_tag,
+            sfx_filename=body.sfx_file,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(404, str(exc))
+    audio_file = f"scene_{body.scene_number:04d}.wav"
+    return {"audio_file": audio_file}
 
 @router.post("/{idea_id}/sync")
 def generate_sync(

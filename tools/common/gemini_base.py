@@ -31,22 +31,33 @@ class GeminiBase(BaseModelTool):
         super().__init__(**kwargs)
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            raise RuntimeError("❌ GEMINI_API_KEY is not defined in the environment")
+            import json
+            from pathlib import Path
+            config_path = Path("config.json")
+            if config_path.exists():
+                try:
+                    data = json.loads(config_path.read_text())
+                    api_key = data.get("gemini_api_key")
+                except Exception:
+                    pass
+        
+        if not api_key:
+            raise RuntimeError("❌ GEMINI_API_KEY is not defined in the environment or config.json")
         self._client = Client(api_key=api_key)
 
     @retry(
-        wait=wait_fixed(30),
-        stop=stop_after_attempt(3),
-        retry=retry_if_exception_type(errors.ServerError),
+        wait=wait_fixed(60),
+        stop=stop_after_attempt(5),
+        retry=retry_if_exception_type((errors.ServerError, errors.ClientError)),
         before_sleep=lambda retry_state: Messenger.info(
-            f"⏳ Error de servidor en Gemini. Reintentando en 30s... "
-            f"(Intento {retry_state.attempt_number})"
+            f"⏳ Esperando cuota de Gemini... Reintentando en 60s "
+            f"(Intento {retry_state.attempt_number}/5)"
         ),
         reraise=True,
     )
     def _execute_with_retry(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """
-        Executes a Gemini API call with a 30s retry on ServerError.
+        Executes a Gemini API call with a 60s retry on ServerError or 429 RateLimit/Quota exhaustion.
         """
         return func(*args, **kwargs)
 

@@ -40,7 +40,7 @@ class FFmpegTool(BaseModelTool):
         narration_wav: Path,
         sfx_mp3: Path,
         out_wav: Path,
-        sfx_volume: float = 0.85,
+        sfx_volume: float = 0.45,
         sfx_offset_sec: float = 0.0,
     ) -> None:
         """
