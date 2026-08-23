@@ -60,12 +60,35 @@ NUNCA uses términos como "Wide shot", "Panorama", o "Landscape", ya que causan 
 
 ### 🎯 ESCENA 1 — HOOK OBLIGATORIO (los primeros 3 segundos deciden todo)
 La escena 1 debe ser UNA SOLA frase corta que DETENGA el scroll instantáneamente.
-Usa una de estas estructuras probadas como base:
-- Pregunta con dato shocking: "¿Sabías que el 95% de la gente hace X y destruye Y sin saberlo?"
-- Afirmación imposible de ignorar: "Lo que nadie te dice sobre X va a cambiar cómo ves Y para siempre."
-- Promesa directa con urgencia: "En los próximos 60 segundos vas a entender algo que le tomó años aprender a la gente exitosa."
-- Dato contraintuitivo: "Hacer X es la razón por la que la mayoría fracasa en Y, aunque parezca lo correcto."
-⚠️ REGLA ABSOLUTA: Máximo 10 palabras. Sin "hola". Sin introducción. Sin contexto previo. Directo al impacto.
+⚠️ REGLA ABSOLUTA: Máximo 12 palabras. Sin "hola". Sin presentación. Sin contexto previo. Directo al impacto.
+
+Elige la estructura de gancho que mejor encaje con la categoría y el tono del contenido:
+
+**🔵 Para Ciencia / Historia / Conspiración / Misterio → usa "Dato Shocking o Afirmación Imposible":**
+- "En 24 horas, toda la tecnología del mundo podría desaparecer."
+- "Lo que encontraron en el fondo del océano no debería existir."
+- "El evento que casi destruyó la humanidad fue borrado de los libros de historia."
+
+**🟣 Para Entretenimiento / Comedia / Cultura Pop / Anime → usa "¿Qué pasaría si...?" (Pregunta imaginativa):**
+- "¿Qué pasaría si los personajes de anime nacieran en Latinoamérica?"
+- "¿Qué pasaría si los superhéroes vivieran en un barrio popular de México?"
+- "¿Y si los villanos de Disney fueran los verdaderos héroes?"
+
+**🔴 Para Finanzas / Motivación / Negocios → usa "Error o Trampa que todos cometen":**
+- "El 97% de la gente ahorra mal y no lo sabe."
+- "Lo que te enseñaron sobre el dinero en la escuela es una mentira."
+- "Trabajar más duro es la razón por la que no logras libertad financiera."
+
+**🟡 Para Horror / Suspenso / Thriller → usa "Revelación Perturbadora":**
+- "Hay algo que tu mente hace mientras duermes y no lo controlas."
+- "El lugar más peligroso del mundo no es el que imaginas."
+- "Una sola decisión esta noche puede cambiar todo lo que conoces."
+
+**🟢 Para Storytelling / Inspiracional → usa "Promesa Personal o Dato Contraintuitivo":**
+- "Perdí todo en 48 horas y fue lo mejor que me pasó."
+- "La persona más exitosa que conocí vivía en la pobreza absoluta."
+
+Después de elegir la estructura correcta para tu contenido, escribe tu propia versión original y poderosa de ese hook.
 
 ### 🔗 REGLA DE CLIFFHANGER ENTRE ESCENAS
 Cada narración debe terminar dejando la historia INCOMPLETA, de modo que el espectador
@@ -142,10 +165,10 @@ En su lugar, descríbelo **físicamente con características físicas únicas qu
 **REGLA CLAVE:** En el campo `narration` (voz en off) SÍ puedes usar los nombres reales de los personajes porque el audio no tiene filtro de copyright.
 Solo aplica la descripción física en el campo `description` del `image_prompt`.
 
-### ESTRUCTURA
-- Entre **12 y 16 escenas**
-- Numeración secuencial desde 1
-"""
+### ESTRUCTURA Y RITMO (ALTA RETENCIÓN VIRAL)
+- ⚠️ REGLA ABSOLUTA DE LONGITUD: El guion DEBE tener EXACTAMENTE entre 8 y 12 escenas. PROHIBIDO generar menos de 8 escenas. Si tu historia es corta, agrega más contexto, revelaciones o giros para alcanzar al menos la escena 8.
+- Ritmo frenético: cero relleno. Cada frase debe aportar misterio, una revelación o un giro inesperado.
+- Numeración secuencial desde 1"""
 
 # ====================================================================================
 # JSON SCHEMAS

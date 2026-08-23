@@ -144,6 +144,8 @@ class FFmpegTool(BaseModelTool):
         Synchronizes a video file to an audio file's duration.
         The video playback speed is adjusted (stretched or shrunk) to match
         the exact duration of the audio, ensuring the entire video is shown.
+        Also applies a subtle fade-in (40ms) and fade-out (80ms) to the audio
+        to prevent abrupt hard-cut transitions between scenes (CapCut-style).
         """
         audio_dur = self.get_audio_duration(audio_in)
         video_dur = self.get_video_duration(video_in)
@@ -155,11 +157,19 @@ class FFmpegTool(BaseModelTool):
         # new_duration = old_duration * scale -> scale = a_dur / v_dur
         scale = audio_dur / video_dur
 
+        # Fade-in: 40ms at start. Fade-out: 80ms before end.
+        fade_in_dur = 0.04
+        fade_out_start = max(0.0, audio_dur - 0.08)
+
         cmd = (
             f"ffmpeg -y -i {shlex.quote(str(video_in))} "
             f"-i {shlex.quote(str(audio_in))} "
-            f'-filter_complex "[0:v]setpts={scale:.6f}*PTS,fps=25[v]" '
-            f'-map "[v]" -map 1:a '
+            f'-filter_complex "'
+            f"[0:v]setpts={scale:.6f}*PTS,fps=25[v];"
+            f"[1:a]afade=t=in:st=0:d={fade_in_dur},"
+            f"afade=t=out:st={fade_out_start:.3f}:d=0.08[a]"
+            f'" '
+            f'-map "[v]" -map "[a]" '
             f"-c:v libx264 -c:a aac -ar 44100 -ac 2 -pix_fmt yuv420p -r 25 "
             f"{shlex.quote(str(video_out))} -v error"
         )
